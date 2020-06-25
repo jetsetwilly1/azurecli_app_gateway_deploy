@@ -1,0 +1,40 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "environment": {
+            "type": "string",
+            "metadata": {
+                "description": "Environment name used for resource creation. e.g. prod or staging"
+            }
+        },
+        "ipAddressSpace": {
+            "type": "string",
+            "metadata": {
+                "description": "The Vnet address space in CIDR notation."
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+        "vnetName" : "[concat('midwolf-', parameters('environment'),'-gateways-uksouth-vnet')]"
+    },
+    "resources": [{
+        "comments": "Creates the Vnet for the gateways.",
+        "name": "[variables('vnetName')]",
+        "tags": {
+            "vnet": "gateways"
+        },
+        "type": "Microsoft.Network/virtualNetworks",
+        "apiVersion": "2019-11-01",
+        "location": "[resourceGroup().location]",
+        "properties": {
+            "addressSpace": {
+                "addressPrefixes": [
+                    "[parameters('ipAddressSpace')]"
+                ]
+            }
+        }
+    }],
+    "outputs": {}
+}

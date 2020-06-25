@@ -1,0 +1,48 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "environment": {
+            "type": "string",
+            "metadata": {
+                "description": "Environment name used for resource creation. e.g. prod or staging"
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+        "nsgName": "[concat('midwolf-', parameters('environment'), '-gateway-uksouth-nsg')]"
+    },
+    "resources": [
+        {
+            "comments":"Creates the NSG protecting the application gateway, only allows Azure resource tags access to port 443",
+            "name": "[variables('nsgName')]",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2019-11-01",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "azure_infra_comms",
+                        "properties": {
+                            "description": "This port range is required for Azure infrastructure communication. These ports are protected (locked down) by Azure certificates",
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "65200-65535",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 100,
+                            "direction": "Inbound",
+                            "sourcePortRanges": [],
+                            "destinationPortRanges": [],
+                            "sourceAddressPrefixes": [],
+                            "destinationAddressPrefixes": []
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {}
+}

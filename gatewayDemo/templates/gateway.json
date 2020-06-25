@@ -1,0 +1,160 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "environment": {
+            "type": "string",
+            "metadata": {
+                "description": "Environment name used for resource creation. e.g. prod or staging"
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+        "appGatewayManagedUserName": "midwolf-gateways-managed-identity",
+        "publicIpName": "[concat('midwolf-', parameters('environment'), '-gateway-public-ip')]",
+        "applicationName": "[concat('midwolf-', parameters('environment'), '-gateway-uksouth')]",
+        "vnetName": "[concat('midwolf-', parameters('environment'), '-gateways-uksouth-vnet')]",
+        "subnetName": "[concat('midwolf-', parameters('environment'), '-gateway-uksouth-snet')]",
+        "fqdnUmbracoWeb": "[concat('midwolfumbracoweb-', parameters('environment'), '.azurewebsites.net')]"
+    },
+    "resources": [
+        {
+            "name": "[variables('appGatewayManagedUserName')]",
+            "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+            "apiVersion": "2018-11-30",
+            "location": "[resourceGroup().location]"
+        },
+        {
+            "name": "[variables('publicIpName')]",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2019-11-01",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static",
+                "idleTimeoutInMinutes": 4,
+                "ipTags": []
+            }
+        },
+        {
+            "type": "Microsoft.Network/applicationGateways",
+            "apiVersion": "2019-11-01",
+            "comments": "Create an application gateway that manages web based traffic saas services primarily.",
+            "name": "[variables('applicationName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIpName'))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities',variables('appGatewayManagedUserName'))]"
+            ],
+            "zones": ["1", "2"],
+            "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                    "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities',variables('appGatewayManagedUserName'))]": {}
+                }
+            },
+            "properties": {
+                "sku": {
+                    "name": "WAF_v2",
+                    "tier": "WAF_v2",
+                    "capacity": 1
+                },
+                "gatewayIPConfigurations": [
+                    {
+                        "name": "appGatewayIpConfig",
+                        "properties": {
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('subnetName'))]"
+                            }
+                        }
+                    }
+                ],
+                "frontendIPConfigurations": [
+                    {
+                        "name": "appGwPublicFrontendIp",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('microsoft.Network/publicIPAddresses', variables('publicIpName'))]"
+                            }
+                        }
+                    }
+                ],
+                "frontendPorts": [
+                    {
+                        "name": "port_80",
+                        "properties": {
+                            "port": 80
+                        }
+                    }
+                ],
+                "httpListeners": [
+                    {
+                        "name": "[concat('midwolf-', parameters('environment'),'-umbraco-listener')]",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('applicationName')), '/frontendIPConfigurations/appGwPublicFrontendIp')]"
+                            },
+                            "frontendPort": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('applicationName')), '/frontendPorts/port_80')]"
+                            },
+                            "protocol": "Http",
+                            "hostName": "[concat(parameters('environment'), '.midwolfazure.co.uk')]",
+                            "hostNames": [],
+                            "requireServerNameIndication": false
+                        }
+                    }
+                ],
+                "backendAddressPools":[
+                    {
+                        "name": "[concat('midwolf-', parameters('environment'),'-umbraco-pool')]",
+                        "properties": {
+                            "backendAddresses": [
+                                {
+                                    "fqdn": "[variables('fqdnUmbracoWeb')]"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "backendHttpSettingsCollection": [
+                    {
+                        "name": "[concat('midwolf-', parameters('environment'),'-umbraco-settings')]",
+                        "properties": {
+                            "port": 443,
+                            "protocol": "Https",
+                            "cookieBasedAffinity": "Enabled",
+                            "pickHostNameFromBackendAddress": true,
+                            "affinityCookieName": "midwolfaffinity",
+                            "requestTimeout": 30
+                        }
+                    }
+                ],
+                "urlPathMaps": [],
+                "requestRoutingRules": [
+                    {
+                        "name": "[concat('midwolf-', parameters('environment'),'-umbraco-routing-rule')]",
+                        "properties": {
+                            "ruleType": "Basic",
+                            "httpListener": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('applicationName')), '/httpListeners/midwolf-', parameters('environment'),'-umbraco-listener')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('applicationName')), '/backendAddressPools/midwolf-', parameters('environment'),'-umbraco-pool')]"
+                            },
+                            "backendHttpSettings": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('applicationName')), '/backendHttpSettingsCollection/midwolf-', parameters('environment'),'-umbraco-settings')]"
+                            }
+                        }
+                    }
+                ],
+                "probes": []
+            }
+        }
+    ],
+    "outputs": {}
+}
